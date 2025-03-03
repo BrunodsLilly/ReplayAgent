@@ -17,10 +17,20 @@ func main() {
 	}
 	defer c.Close()
 
+	agentTemporalClient, err := client.Dial(client.Options{
+		HostPort: "localhost:7233",
+	})
+	if err != nil {
+		log.Fatalln("Unable to create agent client", err)
+	}
+	defer agentTemporalClient.Close()
+
 	w := worker.New(c, "replay-agent", worker.Options{})
 
+	activities := replayagent.NewActivities(agentTemporalClient)
+
 	w.RegisterWorkflow(replayagent.ReplayAgentWF)
-	w.RegisterActivity(replayagent.HelloActivity)
+	w.RegisterActivity(activities)
 
 	err = w.Run(worker.InterruptCh())
 	if err != nil {
