@@ -3,6 +3,7 @@ package replayagent
 import (
 	"time"
 
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -18,8 +19,20 @@ func ReplayAgentWF(ctx workflow.Context, input ReplayAgentInput) (ReplayAgentOut
 	logger := workflow.GetLogger(ctx)
 	logger.Info("ReplayAgent workflow started", "input", input)
 
-	var result HelloActivityOutput
-	err := workflow.ExecuteActivity(ctx, activities.HelloActivity, HelloActivityInput{Name: input.Name}).Get(ctx, &result)
+	// take in a prompt
+	// execute the prompt
+	// get the tool params
+	// execute the tool
+	// check if the check success is true, if not, reprompt
+	// run the next step
+	// if check success is true, return the result
+
+	var toolParams [][]ToolParams
+	var step int
+
+	var sensorReadingsOutput GetSensorReadingsOutput
+	err := workflow.ExecuteActivity(ctx, activities.GetSensorReadings,
+		GetSensorReadingsInput{Step: step}).Get(ctx, &sensorReadingsOutput)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return ReplayAgentOutput{}, err
@@ -27,17 +40,70 @@ func ReplayAgentWF(ctx workflow.Context, input ReplayAgentInput) (ReplayAgentOut
 
 	var promptLLMResult PromptLLMActivityOutput
 	question := "Recommend a list of a list of tools and parameters I need to garden my backyard."
-	err = workflow.ExecuteActivity(ctx, activities.PromptLLMActivity, PromptLLMActivityInput{Prompt: question}).Get(ctx, &promptLLMResult)
+	err = workflow.ExecuteActivity(ctx, activities.PromptLLMActivity,
+		PromptLLMActivityInput{
+			Prompt:         question,
+			UUID:           input.UUID,
+			ToolParams:     toolParams,
+			SensorReadings: sensorReadingsOutput.SensorReadings,
+		}).Get(ctx, &promptLLMResult)
 	if err != nil {
 		logger.Error("Activity failed.", "Error", err)
 		return ReplayAgentOutput{}, err
 	}
 
-	logger.Info("PromptLLMActivity", "result", promptLLMResult)
+	var executeToolResult ExecuteToolOutput
+	var checkSuccessResult CheckSuccessOutput
 
-	logger.Info("ReplayAgent workflow completed.", "result", result)
+	for {
+		toolParams = promptLLMResult.ToolParams
+		childCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout:    time.Second * 30,
+			ScheduleToCloseTimeout: time.Minute * 5,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: time.Millisecond * 100,
+				MaximumAttempts: 5,
+			},
+			Summary: toolParams[step][0].Tool,
+		})
 
-	return ReplayAgentOutput{Result: result.Result}, nil
+		err = workflow.ExecuteActivity(childCtx, activities.ExecuteTool,
+			ExecuteToolInput{
+				Step: step,
+				Tool: toolParams[step][0].Tool,
+			}).Get(ctx, &executeToolResult)
+		if err != nil {
+			logger.Error("Activity failed.", "Error", err)
+			return ReplayAgentOutput{}, err
+		}
+
+		err = workflow.ExecuteActivity(ctx, activities.CheckSuccess,
+			CheckSuccessInput{
+				Step: step,
+			}).Get(ctx, &checkSuccessResult)
+		if err != nil {
+			logger.Error("Activity failed.", "Error", err)
+			return ReplayAgentOutput{}, err
+		}
+
+		var sensorReadingsOutput GetSensorReadingsOutput
+		err := workflow.ExecuteActivity(ctx, activities.GetSensorReadings,
+			GetSensorReadingsInput{Step: step}).Get(ctx, &sensorReadingsOutput)
+		if err != nil {
+			logger.Error("Activity failed.", "Error", err)
+			return ReplayAgentOutput{}, err
+		}
+
+		logger.Info("CheckSuccess result", "step", step, "success", checkSuccessResult.Success)
+
+		if checkSuccessResult.Success || step >= len(toolParams) {
+			break
+		}
+
+		step++
+	}
+
+	return ReplayAgentOutput{Result: "success"}, nil
 }
 
 func WorkflowID(id string) string {

@@ -19,16 +19,16 @@ func main() {
 	defer c.Close()
 
 	// new uuid
-	uuid := uuid.New().String()
+	uuid := uuid.New()
 
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        replayagent.WorkflowID(uuid),
+		ID:        replayagent.WorkflowID(uuid.String()),
 		TaskQueue: "replay-agent",
 	}
 
 	we, err := c.ExecuteWorkflow(context.Background(),
 		workflowOptions, replayagent.ReplayAgentWF,
-		replayagent.ReplayAgentInput{Name: "Temporal"})
+		replayagent.ReplayAgentInput{Name: "Temporal", UUID: uuid})
 	if err != nil {
 		log.Fatalln("Unable to execute workflow", err)
 	}
