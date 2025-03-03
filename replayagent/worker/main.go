@@ -19,8 +19,8 @@ func main() {
 
 	w := worker.New(c, "replay-agent", worker.Options{})
 
-	w.RegisterWorkflow(replayagent.Workflow)
-	w.RegisterActivity(replayagent.Activity)
+	w.RegisterWorkflow(replayagent.ReplayAgentWF)
+	w.RegisterActivity(replayagent.HelloActivity)
 
 	err = w.Run(worker.InterruptCh())
 	if err != nil {
