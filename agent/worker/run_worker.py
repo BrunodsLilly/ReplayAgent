@@ -3,7 +3,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 # Import the activity and workflow from our other files
-from activities import ask_question
+from activities import get_plan
 from workflows import PromptWorkflow
 
 
@@ -16,7 +16,7 @@ async def main():
         client,
         task_queue="my-task-queue",
         workflows=[PromptWorkflow],
-        activities=[ask_question],
+        activities=[get_plan],
     )
     await worker.run()
 

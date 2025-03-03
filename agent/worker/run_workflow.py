@@ -9,7 +9,7 @@ async def main():
     client = await Client.connect("localhost:7233")
 
     # Execute a workflow
-    question = "How old is London?"
+    question = "Recommend a list of a list of tools and parameters I need to garden my backyard."
     result = await client.execute_workflow(
         PromptWorkflow.run, question, id="my-workflow-id", task_queue="my-task-queue"
     )
