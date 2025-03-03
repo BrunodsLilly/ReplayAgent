@@ -1,5 +1,10 @@
+from pydantic_ai import Agent
 from temporalio import activity
 
+
 @activity.defn
-def say_hello(name: str) -> str:
-    return f"Hello, {name}!"
+async def ask_question(prompt: str) -> str:
+    agent = Agent("openai:gpt-4o")
+
+    result_sync = await agent.run(prompt)
+    return result_sync.data
